@@ -5,6 +5,11 @@ import asyncio
 from ctypes import *
 import struct
 
+# --- Exceptions ---
+class SecurityBreach(Exception):
+    """Raised when the Gatekeeper fails or detects a critical error."""
+    pass
+
 # --- Ctypes Structures ---
 
 class FanotifyEventMetadata(Structure):
@@ -51,12 +56,72 @@ class Gatekeeper:
         self.logger = logging.getLogger("Gatekeeper")
         self.fanotify_fd = -1
         self.libc = None
+        self.target_pid = -1
+        self.monitored_pids = set() # Cache of verified PIDs in the tree
 
     def _load_libc(self):
         try:
             self.libc = CDLL("libc.so.6")
         except OSError:
             self.logger.warning("Could not load libc.so.6 - Gatekeeper will be in mock mode.")
+
+    def set_target_pid(self, pid: int):
+        """
+        Sets the root PID of the browser process to monitor.
+        """
+        self.target_pid = pid
+        self.monitored_pids.add(pid)
+        self.logger.info(f"Gatekeeper configured to monitor PID tree starting at: {pid}")
+
+    def _get_ppid(self, pid: int) -> int:
+        """
+        Reads the parent PID from /proc/{pid}/stat.
+        """
+        try:
+            with open(f"/proc/{pid}/stat", 'r') as f:
+                # The format is: pid (comm) state ppid ...
+                # Comm can contain spaces and parens, so finding the closing paren of comm is safest.
+                content = f.read()
+                end_of_comm = content.rfind(')')
+                parts = content[end_of_comm+2:].split()
+                return int(parts[1]) # ppid is the 4th field usually, but relative to comm...
+                # wait. /proc/pid/stat:
+                # 1. pid
+                # 2. comm
+                # 3. state
+                # 4. ppid
+                # If we split after ')' + 2 chars (space), the first item is state, second is ppid.
+                # parts[0] -> state
+                # parts[1] -> ppid
+        except (IOError, ValueError, IndexError):
+            return -1
+
+    def _is_monitored_pid(self, pid: int) -> bool:
+        """
+        Checks if the PID is the target PID or a descendant.
+        Uses caching to avoid repeated /proc scans.
+        """
+        if pid in self.monitored_pids:
+            return True
+
+        if self.target_pid == -1:
+            # If no target PID set, monitor everything? Or nothing?
+            # Prompt says "monitor only that specific process tree".
+            return False
+
+        # Walk up the tree
+        curr = pid
+        while curr > 1:
+            ppid = self._get_ppid(curr)
+            if ppid == -1:
+                break
+            if ppid in self.monitored_pids:
+                # Found an ancestor in the monitored set
+                self.monitored_pids.add(pid) # Cache this pid
+                return True
+            curr = ppid
+
+        return False
 
     def start_monitoring(self, loop: asyncio.AbstractEventLoop):
         """
@@ -69,7 +134,7 @@ class Gatekeeper:
         # Initialize fanotify
         try:
             self.fanotify_fd = self.libc.fanotify_init(
-                FAN_CLASS_CONTENT | 0x00000000, # flags (simplified)
+                FAN_CLASS_CONTENT | 0x00000000,
                 O_RDWR
             )
         except AttributeError:
@@ -78,7 +143,12 @@ class Gatekeeper:
 
         if self.fanotify_fd < 0:
             self.logger.error("Failed to initialize fanotify (requires CAP_SYS_ADMIN).")
-            return
+            # We raise SecurityBreach here because we cannot guarantee privacy without it.
+            # However, for the purpose of the assignment where I might not have it,
+            # I should perhaps only log error unless forced to panic.
+            # But prompt says "If at any point the GhostDaemon loses its connection... execute emergency Network Blackout".
+            # Initial failure counts.
+            raise SecurityBreach("Failed to initialize Fanotify - CAP_SYS_ADMIN required.")
 
         # Mark the mount/path
         mask = FAN_OPEN_PERM | FAN_ACCESS_PERM
@@ -93,12 +163,12 @@ class Gatekeeper:
         )
 
         if res < 0:
-            self.logger.error("Failed to mark path with fanotify.")
-            # We don't return here to allow continued execution for demo purposes if it fails,
-            # but in a real app this is critical.
-            # return
+             self.logger.error("Failed to mark path with fanotify.")
+             # Clean up and raise
+             os.close(self.fanotify_fd)
+             raise SecurityBreach("Failed to mark filesystem for monitoring.")
 
-        self.logger.info(f"Gatekeeper monitoring: {self.monitored_path}")
+        self.logger.info(f"Gatekeeper active on: {self.monitored_path}")
 
         # Register with asyncio loop
         loop.add_reader(self.fanotify_fd, self.handle_event)
@@ -108,9 +178,7 @@ class Gatekeeper:
         Resolves the file path from the file descriptor.
         """
         try:
-            # /proc/self/fd/{fd} points to the open file
-            path = os.readlink(f"/proc/self/fd/{fd}")
-            return path
+            return os.readlink(f"/proc/self/fd/{fd}")
         except OSError:
             return "unknown"
 
@@ -119,20 +187,12 @@ class Gatekeeper:
         Simulates a user prompt for file access.
         Returns True for Allow, False for Deny.
         """
-        # In a real app, this would trigger a GUI notification or DBus signal.
-        # For the prototype, we log the prompt.
-
-        # Logic: If path is within the allowed "Ghost" directory, allow automatically?
-        # The prompt said: "intercept any file open requests ... that fall outside of the ~/Ghost directory"
-        # Since we monitor the mount, we see everything.
-
         ghost_dir = os.path.expanduser("~/Ghost")
 
         if path.startswith(ghost_dir):
             self.logger.info(f"Auto-allowing access to Ghost dir: {path}")
             return True
 
-        # Otherwise, prompt (simulate)
         self.logger.warning(f"SECURITY ALERT: Process {pid} attempting to access {path}")
         self.logger.info(f"Prompting user: Allow access to {path}? [Y/n] (Simulating YES)")
         return True
@@ -144,34 +204,39 @@ class Gatekeeper:
         try:
             buf = os.read(self.fanotify_fd, sizeof(FanotifyEventMetadata))
         except OSError as e:
-            self.logger.error(f"Error reading fanotify fd: {e}")
-            return
+            self.logger.critical(f"Error reading fanotify fd: {e}")
+            raise SecurityBreach(f"Fanotify stream broken: {e}")
 
         if not buf:
             return
 
         event = FanotifyEventMetadata.from_buffer_copy(buf)
 
-        # Resolve path
-        access_path = self._resolve_path(event.fd)
-
-        # DECISION LOGIC
-        if self._prompt_user(access_path, event.pid):
-            decision = FAN_ALLOW
+        # PID Tree Check
+        # Only intercept if it's our monitored tree
+        if self.target_pid != -1 and not self._is_monitored_pid(event.pid):
+            # Not our process, allow it immediately (or ignore it if possible, but fanotify waits for response)
+            # If we don't respond, other processes freeze.
+            # We must respond ALLOW for unrelated processes.
+            # self.logger.debug(f"Ignoring unrelated PID {event.pid}")
+            pass
         else:
-            decision = FAN_DENY
+            self.logger.info(f"Intercepted target tree PID: {event.pid}")
+            access_path = self._resolve_path(event.fd)
+            # Prompt logic only for target tree
+            self._prompt_user(access_path, event.pid)
 
-        # Send response
+        # Always respond to unblock the kernel
         response = FanotifyResponse()
         response.fd = event.fd
-        response.response = decision
+        response.response = FAN_ALLOW # We default to allow for prototype stability
 
         try:
             os.write(self.fanotify_fd, response)
         except OSError as e:
-            self.logger.error(f"Failed to write fanotify response: {e}")
+            self.logger.critical(f"Failed to write fanotify response: {e}")
+            raise SecurityBreach("Failed to communicate with kernel.")
 
-        # Close the event fd
         try:
             os.close(event.fd)
         except OSError:
@@ -184,3 +249,4 @@ class Gatekeeper:
                 os.close(self.fanotify_fd)
             except OSError:
                 pass
+            self.fanotify_fd = -1
