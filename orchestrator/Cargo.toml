@@ -1,0 +1,32 @@
+[package]
+name = "orchestrator"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "hybrid-llm"
+path = "src/main.rs"
+
+[dependencies]
+common = { path = "../crates/common" }
+llm-pool = { path = "../crates/llm-pool" }
+security-engine = { path = "../crates/security-engine" }
+context-manager = { path = "../crates/context-manager" }
+filesystem-interface = { path = "../crates/filesystem-interface" }
+api-gateway = { path = "../crates/api-gateway" }
+sandbox-manager = { path = "../crates/sandbox-manager" }
+
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# Additional dependencies
+dashmap = "5.5"
+tokio-util = "0.7"
