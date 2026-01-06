@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/tauri';
 import { LLMInstance, SystemState, Document, AuditLogEntry } from './types';
 import Dashboard from './pages/Dashboard';
 import { AlertCircle } from 'lucide-react';
+import { useTauriAPI } from './hooks/useTauriAPI';
+import { useWebSocket } from './hooks/useWebSocket';
 
 function App() {
+  const api = useTauriAPI();
   const [systemState, setSystemState] = useState<SystemState>({
     lockdown: 'normal',
     active_llms: [],
@@ -16,28 +18,83 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // WebSocket connection for real-time updates
+  const { isConnected } = useWebSocket({
+    onLLMStatus: (message) => {
+      console.log('LLM status update:', message);
+      loadLLMs();
+    },
+    onDocumentUploaded: (message) => {
+      console.log('Document uploaded:', message);
+      loadDocuments();
+    },
+    onLockdownChanged: (message) => {
+      console.log('Lockdown changed:', message);
+      loadSystemState();
+    },
+    onAuditLog: (message) => {
+      console.log('Audit log entry:', message);
+      loadAuditLog();
+    },
+  });
+
   useEffect(() => {
     loadInitialData();
   }, []);
 
+  const loadSystemState = async () => {
+    try {
+      const state = await api.getSystemState();
+      setSystemState({
+        lockdown: state.lockdown_state.toLowerCase() as 'normal' | 'readonly' | 'locked',
+        active_llms: [], // Will be populated from LLMs list
+        pending_approvals: 0, // TODO: Add to backend
+      });
+    } catch (err) {
+      console.error('Failed to load system state:', err);
+    }
+  };
+
+  const loadLLMs = async () => {
+    try {
+      const llmList = await api.getLLMs();
+      setLlms(llmList);
+      setSystemState(prev => ({
+        ...prev,
+        active_llms: llmList.filter(llm => llm.loaded).map(llm => llm.id),
+      }));
+    } catch (err) {
+      console.error('Failed to load LLMs:', err);
+    }
+  };
+
+  const loadDocuments = async () => {
+    try {
+      const docs = await api.getDocuments();
+      setDocuments(docs);
+    } catch (err) {
+      console.error('Failed to load documents:', err);
+    }
+  };
+
+  const loadAuditLog = async () => {
+    try {
+      const log = await api.getAuditLog();
+      setAuditLog(log);
+    } catch (err) {
+      console.error('Failed to load audit log:', err);
+    }
+  };
+
   const loadInitialData = async () => {
     try {
       setLoading(true);
-      // TODO: Connect to Tauri backend
-      // const state = await invoke<SystemState>('get_system_state');
-      // const llmList = await invoke<LLMInstance[]>('get_llms');
-
-      // Mock data for now
-      setSystemState({
-        lockdown: 'normal',
-        active_llms: [],
-        pending_approvals: 0,
-      });
-
-      setLlms([]);
-      setDocuments([]);
-      setAuditLog([]);
-
+      await Promise.all([
+        loadSystemState(),
+        loadLLMs(),
+        loadDocuments(),
+        loadAuditLog(),
+      ]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
@@ -47,10 +104,14 @@ function App() {
 
   const handlePanicButton = async () => {
     try {
-      // await invoke('trigger_lockdown', { reason: 'user_panic_button' });
-      setSystemState(prev => ({ ...prev, lockdown: 'locked' }));
+      const result = await api.triggerLockdown('User pressed panic button');
+      setSystemState(prev => ({
+        ...prev,
+        lockdown: result.new_state.toLowerCase() as 'normal' | 'readonly' | 'locked',
+      }));
     } catch (err) {
       setError('Failed to trigger lockdown');
+      console.error(err);
     }
   };
 
@@ -94,6 +155,8 @@ function App() {
         auditLog={auditLog}
         onPanicButton={handlePanicButton}
         onRefresh={loadInitialData}
+        isConnected={isConnected}
+        api={api}
       />
     </div>
   );

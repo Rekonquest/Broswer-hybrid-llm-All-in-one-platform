@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { AlertOctagon, RefreshCw, Terminal, Settings } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { AlertOctagon, RefreshCw, Terminal, Wifi, WifiOff } from 'lucide-react';
 import { SystemState, LLMInstance, Document, AuditLogEntry, PermissionScope, LLMStatus } from '../types';
+import { useTauriAPI } from '../hooks/useTauriAPI';
 import DocumentUpload from '../components/DocumentUpload';
 import LLMManager from '../components/LLMManager';
 import PermissionControl from '../components/PermissionControl';
@@ -14,6 +15,8 @@ interface Props {
   auditLog: AuditLogEntry[];
   onPanicButton: () => void;
   onRefresh: () => void;
+  isConnected: boolean;
+  api: ReturnType<typeof useTauriAPI>;
 }
 
 export default function Dashboard({
@@ -23,6 +26,8 @@ export default function Dashboard({
   auditLog,
   onPanicButton,
   onRefresh,
+  isConnected,
+  api,
 }: Props) {
   const [activeView, setActiveView] = useState<'overview' | 'canvas' | 'permissions' | 'audit'>('overview');
   const [llmStatuses] = useState<Map<string, LLMStatus>>(new Map());
@@ -49,19 +54,55 @@ export default function Dashboard({
     },
   });
 
+  // Load permissions from backend on mount
+  useEffect(() => {
+    const loadPermissions = async () => {
+      try {
+        const perms = await api.getPermissions();
+        setPermissions(perms);
+      } catch (err) {
+        console.error('Failed to load permissions:', err);
+      }
+    };
+    loadPermissions();
+  }, [api]);
+
   const handleDocumentUpload = async (files: File[]) => {
-    console.log('Uploading files:', files);
-    // TODO: Implement upload to backend
+    try {
+      for (const file of files) {
+        await api.uploadDocument(file);
+      }
+      onRefresh(); // Refresh to show new documents
+    } catch (err) {
+      console.error('Failed to upload documents:', err);
+    }
   };
 
-  const handleLoadModel = (id: string) => {
-    console.log('Loading model:', id);
-    // TODO: Implement model loading
+  const handleLoadModel = async (id: string) => {
+    try {
+      await api.loadLLM(id);
+      onRefresh(); // Refresh to show updated LLM status
+    } catch (err) {
+      console.error('Failed to load LLM:', err);
+    }
   };
 
-  const handleUnloadModel = (id: string) => {
-    console.log('Unloading model:', id);
-    // TODO: Implement model unloading
+  const handleUnloadModel = async (id: string) => {
+    try {
+      await api.unloadLLM(id);
+      onRefresh(); // Refresh to show updated LLM status
+    } catch (err) {
+      console.error('Failed to unload LLM:', err);
+    }
+  };
+
+  const handlePermissionUpdate = async (newPermissions: PermissionScope) => {
+    try {
+      await api.updatePermissions(newPermissions);
+      setPermissions(newPermissions);
+    } catch (err) {
+      console.error('Failed to update permissions:', err);
+    }
   };
 
   return (
@@ -99,6 +140,20 @@ export default function Dashboard({
             </div>
 
             <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800 text-xs">
+                {isConnected ? (
+                  <>
+                    <Wifi size={14} className="text-success-500" />
+                    <span className="text-gray-400">Connected</span>
+                  </>
+                ) : (
+                  <>
+                    <WifiOff size={14} className="text-danger-500" />
+                    <span className="text-gray-400">Disconnected</span>
+                  </>
+                )}
+              </div>
+
               <button
                 onClick={onRefresh}
                 className="btn btn-secondary"
@@ -147,13 +202,13 @@ export default function Dashboard({
         )}
 
         {activeView === 'canvas' && (
-          <CodingCanvas />
+          <CodingCanvas api={api} />
         )}
 
         {activeView === 'permissions' && (
           <PermissionControl
             permissions={permissions}
-            onUpdate={setPermissions}
+            onUpdate={handlePermissionUpdate}
             lockdownState={systemState.lockdown}
           />
         )}
