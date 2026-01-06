@@ -4,6 +4,11 @@
 *.pdb
 Cargo.lock
 
+# Node/NPM
+node_modules/
+dist/
+*.tsbuildinfo
+
 # IDE
 .vscode/
 .idea/
