@@ -1,0 +1,171 @@
+# Hybrid LLM Platform Configuration
+# Copy this file to config.toml and customize for your setup
+
+[database]
+# PostgreSQL connection URL
+# Format: postgresql://user:password@host:port/database
+url = "postgresql://hybrid_llm_user:change_me_in_production@localhost:5432/hybrid_llm"
+
+# Connection pool settings
+max_connections = 10
+min_connections = 2
+
+[security]
+# Global default permissions
+[security.permissions]
+# File system access patterns
+read_paths = ["/home/*/downloads/*", "/rag/*", "/uploads/*"]
+write_paths = ["/home/*/downloads/*"]
+execute_paths = []
+
+# Allowed commands (whitelist)
+allowed_commands = ["git", "npm", "python", "cargo", "ls", "cat", "grep"]
+
+# Blocked commands (blacklist)
+blocked_commands = ["rm -rf /", "sudo", "dd", "mkfs"]
+
+# Network access
+allow_inbound = true
+allow_outbound = true
+require_network_approval = true
+
+# Resource limits
+max_cpu_percent = 80.0
+max_memory_gb = 8.0
+max_disk_gb = 50.0
+
+# Failed request tracking
+max_failed_requests = 5  # Triggers lockdown
+
+[security.guardrails]
+# Enable/disable specific guardrail rules
+dangerous_rm = true
+sudo_usage = true
+disk_operations = true
+network_exposure = true
+system_modification = true
+data_exfiltration = true
+shell_injection = true
+password_exposure = true
+
+[local_models]
+# Path to directory containing GGUF model files
+models_dir = "./models"
+
+# Model configurations
+[[local_models.models]]
+id = "qwen-coder-8b"
+path = "./models/qwen2.5-coder-8b-q4_k_m.gguf"
+capabilities = ["code"]
+context_size = 8192
+threads = 8
+gpu_layers = 0  # 0 = CPU only, increase for GPU acceleration
+
+[[local_models.models]]
+id = "qwen-generalist-4b"
+path = "./models/qwen2.5-4b-q4_k_m.gguf"
+capabilities = ["general", "analysis"]
+context_size = 4096
+threads = 8
+gpu_layers = 0
+
+[[local_models.models]]
+id = "redreamer-3b"
+path = "./models/redreamer-3b-q4_k_m.gguf"
+capabilities = ["security"]
+context_size = 4096
+threads = 4
+gpu_layers = 0
+
+[cloud_models]
+# Cloud LLM API keys (set via environment variables for security)
+# ANTHROPIC_API_KEY=sk-ant-...
+# OPENAI_API_KEY=sk-...
+# GOOGLE_API_KEY=...
+
+[[cloud_models.models]]
+id = "claude-sonnet"
+provider = "claude"
+model = "claude-3-5-sonnet-20241022"
+capabilities = ["code", "general", "analysis", "creative"]
+# API key from environment: ANTHROPIC_API_KEY
+
+[[cloud_models.models]]
+id = "gpt-4"
+provider = "openai"
+model = "gpt-4-turbo-preview"
+capabilities = ["code", "general", "analysis"]
+# API key from environment: OPENAI_API_KEY
+
+[[cloud_models.models]]
+id = "gemini-pro"
+provider = "gemini"
+model = "gemini-1.5-pro"
+capabilities = ["general", "analysis"]
+# API key from environment: GOOGLE_API_KEY
+
+[rag]
+# RAG (Retrieval-Augmented Generation) settings
+
+# Document chunking
+chunk_size = 500  # words
+chunk_overlap = 50  # words
+
+# Embedding model
+embedding_model = "sentence-transformers/all-MiniLM-L6-v2"
+embedding_dimension = 384
+
+# Search settings
+default_search_limit = 5
+similarity_threshold = 0.7
+
+# Auto-indexing
+watch_uploads_folder = true
+auto_index_on_upload = true
+
+[filesystem]
+# File system paths
+base_path = "./data"
+downloads_path = "./data/downloads"
+uploads_path = "./data/uploads"
+rag_path = "./data/rag"
+sandboxes_path = "./data/sandboxes"
+
+[sandbox]
+# Sandbox execution settings
+backend = "firecracker"  # or "docker", "wasm"
+
+# Firecracker settings (if using Firecracker)
+[sandbox.firecracker]
+kernel_image = "/usr/local/share/firecracker/vmlinux"
+rootfs_image = "/usr/local/share/firecracker/rootfs.ext4"
+vcpu_count = 2
+mem_size_mib = 1024
+
+# Resource limits per sandbox
+[sandbox.limits]
+max_cpu_percent = 50.0
+max_memory_gb = 2.0
+max_disk_gb = 10.0
+max_network_bandwidth_mbps = 10.0
+
+[orchestrator]
+# Message bus settings
+message_bus_capacity = 1000
+worker_threads = 8
+
+# Logging
+log_level = "info"  # debug, info, warn, error
+log_format = "json"  # json or pretty
+
+# Audit logging
+audit_log_enabled = true
+audit_log_to_database = true
+audit_log_to_file = false
+audit_log_file = "./data/audit.log"
+
+[ui]
+# UI settings (for future Tauri app)
+enabled = false
+host = "127.0.0.1"
+port = 3000
