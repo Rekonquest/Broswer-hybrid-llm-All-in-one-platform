@@ -42,3 +42,4 @@ Thumbs.db
 /downloads/
 /uploads/
 /rag/
+src-tauri/target/
