@@ -3,6 +3,9 @@ name = "hybrid-llm-tauri"
 version = "0.1.0"
 edition = "2021"
 
+# This makes src-tauri a standalone package outside the main workspace
+[workspace]
+
 [build-dependencies]
 tauri-build = { version = "1.5", features = [] }
 
