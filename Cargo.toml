@@ -9,6 +9,7 @@ members = [
     "crates/filesystem-interface",
     "crates/api-gateway",
     "crates/context-manager",
+    "crates/llama-cpp-provider",
 ]
 
 [workspace.package]
