@@ -115,7 +115,9 @@ npm run tauri dev
 npm run tauri build
 ```
 
-For detailed build instructions including other Linux distributions, Docker builds, and troubleshooting, see **[BUILD_REQUIREMENTS.md](BUILD_REQUIREMENTS.md)**.
+For detailed build instructions including other Linux distributions, Docker builds, and troubleshooting, see:
+- **[BUILD_REQUIREMENTS.md](BUILD_REQUIREMENTS.md)** - General Linux build guide
+- **[FEDORA_43_BUILD.md](FEDORA_43_BUILD.md)** - Fedora 43 (2026) specific guide with Tauri v2
 
 ## ⚙️ Configuration
 
@@ -273,7 +275,8 @@ browser-privacy/
 ## 📚 Documentation
 
 - **[README.md](README.md)** - Project overview (this file)
-- **[BUILD_REQUIREMENTS.md](BUILD_REQUIREMENTS.md)** - System dependencies and build instructions
+- **[BUILD_REQUIREMENTS.md](BUILD_REQUIREMENTS.md)** - General system dependencies and build instructions
+- **[FEDORA_43_BUILD.md](FEDORA_43_BUILD.md)** - Fedora 43 (2026) specific build guide with Tauri v2
 - **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Detailed system architecture
 - **[docs/SETUP.md](docs/SETUP.md)** - PostgreSQL and environment setup
 - **[ui/INTEGRATION.md](ui/INTEGRATION.md)** - Frontend-backend integration guide
