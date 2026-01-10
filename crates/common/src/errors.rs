@@ -1,4 +1,5 @@
 use thiserror::Error;
+use serde::Serialize;
 
 #[derive(Error, Debug)]
 pub enum HybridLLMError {
@@ -47,6 +48,17 @@ pub enum HybridLLMError {
 
     #[error(transparent)]
     Other(#[from] anyhow::Error),
+}
+
+// Custom Serialize implementation for Tauri IPC bridge compatibility
+// Converts the error to a string representation for serialization
+impl Serialize for HybridLLMError {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.to_string().as_ref())
+    }
 }
 
 pub type Result<T> = std::result::Result<T, HybridLLMError>;
