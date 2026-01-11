@@ -10,13 +10,14 @@ use tauri::Manager;
 use tracing::{info, error};
 use tracing_subscriber;
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 fn main() {
     // Initialize logging
     tracing_subscriber::fmt()
         .with_env_filter("hybrid_llm=debug,info")
         .init();
 
-    info!("🚀 Starting Hybrid LLM Platform Tauri app...");
+    info!("🚀 Starting Hybrid LLM Platform Tauri v2 app...");
 
     tauri::Builder::default()
         .setup(|app| {
@@ -25,14 +26,15 @@ fn main() {
             app.manage(state);
 
             // Start WebSocket server for real-time updates
-            let app_handle = app.handle();
+            // Clone the handle for the async task
+            let app_handle = app.handle().clone();
             tokio::spawn(async move {
                 if let Err(e) = websocket::start_server(app_handle).await {
                     error!("WebSocket server error: {}", e);
                 }
             });
 
-            info!("✅ Tauri app initialized");
+            info!("✅ Tauri v2 app initialized successfully");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

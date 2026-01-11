@@ -11,10 +11,14 @@ tauri-build = { version = "2.0", features = [] }
 
 [dependencies]
 # Tauri v2 - Compatible with webkit2gtk-4.1 and libsoup-3 on Fedora 43
-tauri = { version = "2.0", features = ["protocol-asset"] }
-tauri-plugin-shell = "2.0"
+tauri = { version = "2.0", features = [] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+
+# Tauri v2 plugins
+tauri-plugin-shell = "2.0"
+tauri-plugin-dialog = "2.0"
+tauri-plugin-fs = "2.0"
 
 # Our crates
 common = { path = "../crates/common" }
@@ -42,5 +46,5 @@ tokio-tungstenite = "0.21"
 futures-util = "0.3"
 
 [features]
-default = ["custom-protocol"]
-custom-protocol = ["tauri/custom-protocol"]
+default = []
+# Tauri v2 doesn't use custom-protocol feature the same way
