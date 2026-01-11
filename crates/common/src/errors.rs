@@ -46,6 +46,9 @@ pub enum HybridLLMError {
     #[error("Timeout: {0}")]
     Timeout(String),
 
+    #[error("Internal error: {0}")]
+    Internal(String),
+
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
@@ -58,6 +61,19 @@ impl Serialize for HybridLLMError {
         S: serde::Serializer,
     {
         serializer.serialize_str(self.to_string().as_ref())
+    }
+}
+
+// Trait implementations for convenient error conversions
+impl From<String> for HybridLLMError {
+    fn from(s: String) -> Self {
+        HybridLLMError::Internal(s)
+    }
+}
+
+impl From<&str> for HybridLLMError {
+    fn from(s: &str) -> Self {
+        HybridLLMError::Internal(s.to_string())
     }
 }
 
