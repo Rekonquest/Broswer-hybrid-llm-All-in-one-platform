@@ -36,12 +36,26 @@ pub struct AuditLogEntry {
 }
 
 /// Application state shared across Tauri commands
+/// Note: All fields are skipped during serialization as they contain
+/// thread-safe locks (Arc<RwLock>) that cannot be serialized
+#[derive(Serialize, Deserialize)]
 pub struct AppState {
+    #[serde(skip)]
     pub llm_pool: Arc<RwLock<LLMPool>>,
+    #[serde(skip)]
     pub security_engine: Arc<SecurityEngineImpl>,
+    #[serde(skip)]
     pub permissions: Arc<RwLock<PermissionScope>>,
+    #[serde(skip)]
     pub documents: Arc<RwLock<Vec<Document>>>,
+    #[serde(skip)]
     pub audit_log: Arc<RwLock<Vec<AuditLogEntry>>>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AppState {
