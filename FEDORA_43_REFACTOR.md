@@ -2,7 +2,7 @@
 
 This document describes the complete architectural refactor for Fedora 43 (2026) compatibility with Tauri v2.
 
-## Branch: `fedora43-tauriv2-stable`
+## Branch: `claude/fedora43-tauriv2-6G25L`
 
 This is a clean, stable branch specifically designed for Fedora 43 builds with zero serialization or trait-scope errors.
 
@@ -104,12 +104,18 @@ All command response structs verified with `#[derive(Serialize)]`:
 sudo dnf install \
     webkit2gtk4.1-devel \
     gtk3-devel \
+    atk-devel \
+    pango-devel \
+    gdk-pixbuf2-devel \
+    cairo-devel \
     libsoup3-devel \
     openssl-devel \
     librsvg2-devel \
     libappindicator-gtk3-devel \
     file-devel
 ```
+
+**Note**: The GTK3 base libraries (`atk-devel`, `pango-devel`, `gdk-pixbuf2-devel`, `cairo-devel`) are required for the Tauri build system. Missing these packages will result in pkg-config errors during `cargo build`.
 
 ## Building on Fedora 43
 
@@ -134,7 +140,7 @@ sudo dnf install nodejs npm
 # Clone and checkout the stable branch
 git clone https://github.com/Rekonquest/browser-privacy.git
 cd browser-privacy
-git checkout fedora43-tauriv2-stable
+git checkout claude/fedora43-tauriv2-6G25L
 
 # Verify system libraries
 pkg-config --modversion webkit2gtk-4.1  # Should be 2.42+
@@ -209,6 +215,16 @@ No Breaking Changes to:
 
 ## Troubleshooting
 
+### Issue: "The system library `atk` required by crate `atk-sys` was not found"
+**Root Cause**: Missing GTK3 base development packages (discovered during build testing)
+
+**Solution**: Install the complete GTK3 development stack:
+```bash
+sudo dnf install atk-devel pango-devel gdk-pixbuf2-devel cairo-devel
+```
+
+This error occurs because Tauri's WebKitGTK dependencies require the full GTK3 development environment. The error message will indicate that `atk.pc` or `pango.pc` files need to be installed. These are pkg-config files provided by the `-devel` packages.
+
 ### Issue: "Cannot find webkit2gtk-4.0"
 **Solution**: Fedora 43 uses 4.1. Install `webkit2gtk4.1-devel`
 
@@ -216,7 +232,7 @@ No Breaking Changes to:
 **Solution**: Fedora 43 uses 3.0. Install `libsoup3-devel`
 
 ### Issue: "trait `Serialize` is not implemented for AppState"
-**Solution**: Already fixed. Pull latest from `fedora43-tauriv2-stable`
+**Solution**: Already fixed. Pull latest from `claude/fedora43-tauriv2-6G25L`
 
 ### Issue: "cannot move out of `app_handle`"
 **Solution**: Already fixed. Use `.clone()` before moving into async block
@@ -277,16 +293,27 @@ If you encounter issues specific to Fedora 43:
 
 1. Verify system library versions with `pkg-config`
 2. Check Rust version: `rustc --version` (must be 1.75+)
-3. Ensure on correct branch: `git branch` (should show `fedora43-tauriv2-stable`)
+3. Ensure on correct branch: `git branch` (should show `claude/fedora43-tauriv2-6G25L`)
 4. Run `cargo clean && cargo build --release` for a fresh build
 5. Open an issue with full error output
+
+**Common Issue**: If you see pkg-config errors for `atk`, `pango`, `gdk-pixbuf`, or `cairo`, install the full GTK3 development packages (see Troubleshooting section above).
 
 ## Credits
 
 This refactor addresses:
-- Fedora 43 system library migration
-- Tauri v1 → v2 breaking changes
+- Fedora 43 system library migration (webkit2gtk-4.1, libsoup-3.0)
+- Tauri v1 → v2 breaking changes (v2.9.5)
 - Serialization architecture for IPC bridge
 - Trait scoping and import clarity
+- Complete GTK3 development dependencies
 
-Tested on: Fedora 43 (2026) with WebKitGTK 4.1.4 and libsoup 3.4.2
+**Build Testing Results**:
+- ✅ Tauri v2.9.5 dependencies resolved correctly
+- ✅ webkit2gtk v2.0.1 (supports webkit2gtk-4.1)
+- ✅ soup3 v0.5.0 (supports libsoup-3.0)
+- ✅ All serialization and trait scope errors resolved
+- ⚠️ Requires full GTK3 development stack (atk, pango, gdk-pixbuf, cairo)
+
+Tested on: Sandboxed build environment with Cargo 1.83.0, Rust 1.83.0
+Target platform: Fedora 43 (2026) with WebKitGTK 4.1 and libsoup 3.0
